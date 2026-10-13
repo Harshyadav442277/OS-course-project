@@ -1,0 +1,26 @@
+# Sentinel thresholds. Anything left out falls back to the defaults in sentinel/config.py.
+
+interval: 2          # seconds between samples
+
+# total score -> what happens
+warn_at: 40
+contain_at: 70
+
+rules:
+  cpu:
+    percent: 90      # % of one core
+    for_seconds: 10  # has to stay above it this long
+    score: 15
+  children:
+    count: 50        # whole process subtree, not just direct children
+    score: 25
+  file_changes:
+    count: 100
+    window: 10       # seconds
+    score: 40
+  connections:
+    count: 100
+    score: 20
+  open_files:
+    count: 500
+    score: 15
