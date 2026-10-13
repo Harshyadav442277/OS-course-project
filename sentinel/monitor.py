@@ -35,7 +35,7 @@ ATTRS = ["pid", "ppid", "name", "username", "status", "cpu_percent",
 
 class Monitor:
     def __init__(self):
-        # (pid, create_time) -> (when, read_bytes, write_bytes)
+        # (pid, create_time) -> (when, rchar, wchar)
         # create_time is in the key so a reused pid doesn't inherit old numbers
         self._last_io = {}
 
@@ -58,13 +58,17 @@ class Monitor:
             read_rate = write_rate = 0.0
             io = info["io_counters"]
             if io is not None:
+                # rchar/wchar count every read()/write() call. read_bytes/write_bytes
+                # only count what goes to a block device, so anything written to
+                # tmpfs (/tmp on newer Ubuntu) would show up as 0.
+                rd, wr = io.read_chars, io.write_chars
                 key = (info["pid"], info["create_time"])
                 prev = self._last_io.get(key)
                 if prev and now > prev[0]:
                     dt = now - prev[0]
-                    read_rate = (io.read_bytes - prev[1]) / dt
-                    write_rate = (io.write_bytes - prev[2]) / dt
-                io_seen[key] = (now, io.read_bytes, io.write_bytes)
+                    read_rate = (rd - prev[1]) / dt
+                    write_rate = (wr - prev[2]) / dt
+                io_seen[key] = (now, rd, wr)
 
             mem = info["memory_info"]
             procs[info["pid"]] = ProcStats(
