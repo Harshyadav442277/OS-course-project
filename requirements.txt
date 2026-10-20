@@ -1,2 +1,3 @@
 psutil>=6.0
 PyYAML>=6.0
+inotify-simple>=2.0; sys_platform == 'linux'

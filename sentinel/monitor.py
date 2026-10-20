@@ -21,6 +21,7 @@ class ProcStats:
     children: int = 0     # direct children only
     descendants: int = 0  # the whole subtree
     conns: int = 0
+    file_changes: int = 0  # estimated MODIFY events in the watcher's rolling window
 
     @property
     def age(self):

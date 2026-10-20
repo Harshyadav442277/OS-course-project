@@ -8,6 +8,7 @@ DEFAULTS = {
     "interval": 2,
     "warn_at": 40,
     "contain_at": 70,
+    "protected_names": ["systemd", "init", "sshd", "NetworkManager", "sentinel"],
     "rules": {
         "cpu":          {"percent": 90, "for_seconds": 10, "score": 15},
         "children":     {"count": 50, "score": 25},
@@ -48,6 +49,10 @@ def merge(base, extra, where=""):
             if not isinstance(val, dict):
                 raise ValueError(f"{where}{key} should be a section, not a value")
             merge(base[key], val, f"{where}{key}.")
+        elif isinstance(base[key], list):
+            if not isinstance(val, list) or not all(isinstance(name, str) and name for name in val):
+                raise ValueError(f"{where}{key} must be a list of nonempty names")
+            base[key] = val
         else:
             if (isinstance(val, bool) or not isinstance(val, (int, float))
                     or (isinstance(val, float) and not math.isfinite(val)) or val < 0):

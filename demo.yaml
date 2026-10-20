@@ -1,0 +1,11 @@
+# Lower thresholds for the bounded workload launched by --demo.
+interval: 0.5
+rules:
+  cpu:
+    percent: 20
+    for_seconds: 1
+  children:
+    count: 3
+  file_changes:
+    count: 5
+    window: 5

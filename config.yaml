@@ -2,9 +2,10 @@
 
 interval: 2          # seconds between samples
 
-# Score labels only; process containment is not implemented yet.
+# Signals require --pid targets and --contain (or the isolated --demo).
 warn_at: 40
 contain_at: 70
+protected_names: [systemd, init, sshd, NetworkManager, sentinel]
 
 rules:
   cpu:
@@ -15,7 +16,7 @@ rules:
     count: 50        # whole process subtree, not just direct children
     score: 25
   file_changes:
-    # Scoring is ready, but the CLI has no file watcher feeding this rule yet.
+    # Estimated MODIFY events, attributed through visible writable /proc/PID/fd entries.
     count: 100
     window: 10       # seconds
     score: 40

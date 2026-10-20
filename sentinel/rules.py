@@ -20,7 +20,7 @@ class RiskEngine:
         self._hot_since = {}
 
     def assess(self, procs, file_changes=None, now=None):
-        # Optional {pid: changes in the configured window}; no live watcher yet.
+        # The watcher supplies estimated MODIFY counts in the configured window.
         # now can be passed in so the tests don't have to sleep 10 s
         now = time.monotonic() if now is None else now
         file_changes = file_changes or {}
@@ -49,7 +49,7 @@ class RiskEngine:
             changes = file_changes.get(pid, 0)
             if changes > r["count"]:
                 v.score += r["score"]
-                v.reasons.append(f"{changes} file changes in {r['window']}s")
+                v.reasons.append(f"{changes} estimated file modifications in {r['window']}s")
 
             r = rules["connections"]
             if p.conns > r["count"]:

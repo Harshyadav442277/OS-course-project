@@ -49,12 +49,13 @@ def test_levels(engine):
     v = engine.assess({100: proc(descendants=60, conns=150)})[100]
     assert (v.score, v.level) == (45, WARNING)
 
-    # Supplied file-change counts exercise scoring; there is no live watcher yet.
+    # Fixed counts exercise scoring independently of inotify timing.
     procs = {100: proc(cpu=95.0, descendants=71)}
     engine.assess(procs, now=0)
     v = engine.assess(procs, file_changes={100: 342}, now=12)[100]
     assert (v.score, v.level) == (80, CONTAIN)
-    assert v.reasons == ["CPU 95% for 12s", "71 descendant processes", "342 file changes in 10s"]
+    assert v.reasons == ["CPU 95% for 12s", "71 descendant processes",
+                         "342 estimated file modifications in 10s"]
 
 
 def test_unreadable_fds_dont_count(engine):
@@ -106,6 +107,8 @@ def test_shipped_config_matches_defaults():
     ("interval: .inf", "interval must be a finite, nonnegative number"),
     ("warn_at: 80", "warn_at must not exceed contain_at"),
     ("rules:\n  file_changes:\n    window: 0", "window must be greater than zero"),
+    ("protected_names: init", "protected_names must be a list"),
+    ("protected_names: [false]", "protected_names must be a list"),
 ])
 def test_invalid_config(tmp_path, contents, message):
     path = tmp_path / "config.yaml"

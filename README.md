@@ -1,77 +1,131 @@
 # Sentinel
 
-Sentinel is an OS course project that monitors Linux processes and gives them
-rule-based risk scores. It prints a terminal table with resource usage and the
-reasons for warning or containment labels. **It currently only reports scores.
-Freezing, resuming and killing processes are planned.**
+Sentinel is an OS course project for monitoring Linux processes, scoring unusual
+activity and pausing selected high-risk processes. It has a terminal dashboard,
+manual signal controls, file activity monitoring and a JSON Lines event log.
 
-## Running it
+## Run
 
-Needs Linux and Python 3.10+. On Windows it works inside WSL.
+Use Linux (or WSL), Python 3.10+, and a normal user account. Signal controls need
+Linux pidfd support, available on kernels 5.3 and later.
 
-```
+```bash
 python3 -m venv .venv
-. .venv/bin/activate
+source .venv/bin/activate
 pip install -r requirements.txt
 python -m sentinel
 ```
 
-Options: `-n 1` samples every second instead of every 2, `--top 30` shows more rows,
-`--once` prints a single table and exits, `-c file.yaml` uses a different config.
-The first table appears after one sampling interval so CPU and I/O rates have a
-baseline. Press Ctrl+C to stop. Run as your normal user; permissions may limit
-details for other users' processes.
+This monitors all visible processes without sending signals. The first table
+appears after one sampling interval. For a complete demonstration:
 
-Tests: `pip install pytest`, then `python -m pytest`.
+```bash
+python -m sentinel --demo
+```
+
+The demo uses lower thresholds from `demo.yaml`, writes eight small files in a
+temporary directory, uses part of one CPU core and starts four sleeping children.
+Only the demo and its descendants are eligible for controls. After a few samples,
+the demo should show `FROZEN`. Quitting cleans up its processes and scratch files.
+
+For another workload, select its PID and the directory to watch:
+
+```bash
+python -m sentinel --pid 12345 --watch /path/to/scratch --contain
+```
+
+`--contain` automatically sends SIGSTOP when a selected process reaches the risk
+threshold. Without it, selected processes can still be controlled manually.
+Selecting a PID also selects descendants discovered while it is monitored.
+
+| Option | Purpose |
+|---|---|
+| `-c file.yaml` | Override configuration values |
+| `-n 1` | Sample every second (default: 2) |
+| `--top 30` | Show more rows (default: 15) |
+| `--once` | Print one sample and exit |
+| `--pid PID` | Select processes eligible for controls; repeatable |
+| `--watch DIR` | Watch immediate files in a directory; repeatable |
+| `--log path.jsonl` | Event log path (default: `sentinel.jsonl`) |
+| `--no-clear` | Keep previous tables on screen |
+
+Type a command and press Enter:
+
+```text
+inspect PID
+freeze PID
+resume PID
+kill PID
+quit
+```
+
+`resume` approves that process for the rest of the session, preventing an immediate
+automatic freeze. A manual `freeze` removes that approval. `kill` sends SIGKILL
+only on request. Signals affect the specified PID, not its entire process group.
+`quit`, Ctrl+C, SIGTERM and SIGHUP resume processes stopped by this session.
+An unrelated process that was already stopped is not claimed or resumed.
 
 ## How it works
 
-`__main__.py` loads thresholds through `config.py`, then repeats three steps:
-
-1. `monitor.py` uses psutil and Linux `/proc` data to collect process statistics.
-2. `rules.py` adds points for each threshold exceeded and returns scores and reasons.
-3. The CLI sorts by risk score, then CPU usage, and prints the top processes.
-
-The OS concepts are PIDs and parent PIDs, process states and lifetimes, process
-trees, CPU usage, resident memory, threads, file descriptors, process I/O and
-IPv4/IPv6 sockets. The table shows a subset of the collected fields. `KIDS` counts
-all descendants, including grandchildren. `FDS` includes files, pipes and sockets.
-Memory is measured but has no scoring rule.
-
-Each process then gets a risk score. Every rule that fires adds points:
+1. `monitor.py` uses psutil and Linux `/proc` data to collect PIDs, parent PIDs,
+   states, CPU, RSS memory, threads, file descriptors, I/O rates and network sockets.
+   Parent links give direct-child and whole-subtree counts.
+2. `files.py` reads inotify events and estimates which process modified a file
+   using writable `/proc/PID/fd` entries, inode numbers and recent I/O activity.
+3. `rules.py` adds points for exceeded thresholds. `config.py` loads and checks YAML.
+4. `contain.py` checks scope, ownership and protected processes before sending
+   signals through pidfds. PID plus start time identifies stored process history.
+5. `__main__.py` runs the sampling loop, displays results and accepts commands.
+   `events.py` records risk changes, process arrivals/exits, file activity and actions.
 
 | Rule | Default threshold | Points |
 |---|---|---:|
-| CPU | above 90% at each sample over at least 10 s | 15 |
-| Descendant processes | more than 50 | 25 |
-| Network sockets (including listeners) | more than 100 | 20 |
-| File descriptors | more than 500 | 15 |
-| File changes (scoring only, no live watcher) | more than 100 in 10 s | 40 |
+| CPU | Above 90% at samples spanning at least 10 seconds | 15 |
+| Descendants | More than 50 | 25 |
+| Estimated file modifications | More than 100 observed MODIFY events in 10 seconds | 40 |
+| Network sockets, including listeners | More than 100 | 20 |
+| File descriptors, including pipes and sockets | More than 500 | 15 |
 
 Under 40 is `NORMAL`, 40 through 69 is `WARNING`, and 70 or more is `CONTAIN`.
-`CONTAIN` is a label and sends no signal. Thresholds and points live in
-`config.yaml`; omitted values use defaults. The `open_files` config key counts
-all file descriptors. The file-change rule accepts supplied counts in tests,
-but the CLI does not supply any yet.
+`CONTAIN` is the score label; `FROZEN` confirms Sentinel sent SIGSTOP. The CLI also
+shows the latest OS process state. `KIDS` includes grandchildren; `CHG~` is the
+estimated modification count over the configured window. Memory is measured but
+has no scoring rule. The `open_files` configuration key counts all descriptors.
+Frozen rows stay above other rows even when their score falls. Use `--no-clear`
+when inspecting a process so its detailed snapshot stays in terminal scrollback.
 
-## Limitations
+## Limits
 
-1. These are simple heuristics. A busy build or a parent with many descendants
-   can score highly without being harmful. This is not malware detection.
-2. Sampling can miss short-lived processes and activity between samples. The
-   process tree is a snapshot, not a complete history of forks and exits.
-3. CPU is relative to one core and can exceed 100%. A new process needs another
-   sample before CPU and I/O rates are available. PID and start time together
-   identify the stored CPU-rule timer and I/O history, because Linux reuses PIDs.
-4. I/O rates count bytes passed through read/write calls, including pipes and
-   tmpfs, rather than bytes reaching disk. They do not count changed files.
-5. Unreadable file descriptor counts display as `-`. Other unavailable values
-   may appear as zero; sockets without a visible owner cannot be assigned a PID.
+1. These are heuristics, not malware detection. Busy builds and large process
+   trees can score highly. Sentinel, its ancestors, PID 1, configured protected
+   names and other users' processes cannot be signalled through the controls.
+2. Sampling misses short-lived processes and activity between samples. CPU is
+   relative to one core and can exceed 100%. New processes need a rate baseline.
+3. inotify supplies no writer PID and can coalesce events. Only MODIFY events
+   with one visible active writable owner are attributed. Closed descriptors,
+   multiple writers, permissions and changes between scans leave gaps or can
+   produce an incorrect estimate. Creates, deletes and renames are observed but
+   not assigned to a process. `CHG~` is not an exact count of writes or changed files.
+4. Watches are nonrecursive. Replaced or moved watched directories require a
+   restart. Queue overflow is reported and clears accumulated file scores.
+5. I/O rates count syscall bytes, including pipes and tmpfs, rather than disk I/O.
+   Missing descriptor counts show `-`; some other unavailable values show zero.
+6. Signals affect individual processes, so children may continue after a parent
+   is frozen or killed. SIGKILL or a system crash cannot run shutdown cleanup;
+   a remaining stopped workload can be resumed with `kill -CONT PID`.
+7. The append-only log grows until you rotate or remove it. It records observed
+   process arrivals/exits, not every fork or exit between samples.
 
-## Planned features
+## Testing and next improvements
 
-1. Freeze, resume and kill controls using SIGSTOP, SIGCONT and SIGKILL, with
-   protection for Sentinel and essential processes.
-2. File activity monitoring using inotify. Mapping events to processes still
-   needs a design, since inotify events do not include the writer's PID.
-3. Interactive CLI controls, an event log and a harmless demo program.
+```bash
+pip install pytest
+python -m pytest
+```
+
+Linux tests launch real temporary processes and exercise CPU/I/O readings,
+inotify, signals, automatic containment, interactive commands and shutdown cleanup.
+See [TESTING.md](TESTING.md) for hands-on checks and the existing WSL setup.
+
+Possible next improvements are recursive watches, better file-writer attribution,
+process-group controls and log rotation. cgroups and eBPF are outside this version.
