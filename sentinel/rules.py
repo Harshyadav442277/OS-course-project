@@ -1,8 +1,4 @@
-"""Turns process stats into a risk score.
-
-Each rule adds a fixed number of points when its threshold is crossed (see
-config.yaml). The total decides the level: NORMAL, WARNING or CONTAIN.
-"""
+# every rule that fires adds its points (config.yaml), the total picks the level
 
 import time
 from dataclasses import dataclass, field
@@ -26,11 +22,8 @@ class RiskEngine:
         self._hot_since = {}
 
     def assess(self, procs, file_changes=None, now=None):
-        """Score every process. Returns {pid: Verdict}.
-
-        file_changes is {pid: number of file changes in the last window}; it comes
-        from the file watcher, and processes missing from it count as 0.
-        """
+        # file_changes = {pid: changes in the last window} from the file watcher.
+        # now can be passed in so the tests don't have to sleep 10 s
         now = time.monotonic() if now is None else now
         file_changes = file_changes or {}
         rules = self.cfg["rules"]

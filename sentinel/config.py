@@ -18,10 +18,7 @@ DEFAULTS = {
 
 
 def load(path=None):
-    """Defaults, overridden by whatever is in the yaml file.
-
-    With no path, ./config.yaml is used if it exists.
-    """
+    # no path -> use ./config.yaml if there is one, otherwise just the defaults
     cfg = copy.deepcopy(DEFAULTS)
     if path is None:
         if not os.path.exists("config.yaml"):

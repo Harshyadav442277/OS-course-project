@@ -28,8 +28,8 @@ def print_table(procs, verdicts, top):
               f"{p.descendants:>5} {fds:>5} {p.conns:>5} {human(p.write_rate):>8} "
               f"{v.score:>5}  {v.level}")
 
-    flagged = [p for p in rows if verdicts[p.pid].level != NORMAL]
-    for p in flagged:
+    bad = [p for p in rows if verdicts[p.pid].level != NORMAL]
+    for p in bad:
         v = verdicts[p.pid]
         print(f"\n{v.level}: {p.name} (pid {p.pid}), risk {v.score}")
         for reason in v.reasons:

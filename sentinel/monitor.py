@@ -1,5 +1,3 @@
-"""Per-process stats, read from /proc through psutil."""
-
 import time
 from dataclasses import dataclass
 
@@ -40,12 +38,9 @@ class Monitor:
         self._last_io = {}
 
     def sample(self):
-        """One pass over every process. Returns {pid: ProcStats}.
-
-        psutil keeps the Process objects between calls to process_iter(), which is
-        what makes cpu_percent meaningful: it's measured since the last call. So the
-        very first sample reports 0% for everything.
-        """
+        # psutil keeps its Process objects between process_iter() calls, and
+        # cpu_percent is measured since the previous call. That's why the very
+        # first sample shows 0% for everything.
         now = time.monotonic()
         procs = {}
         io_seen = {}
@@ -88,12 +83,19 @@ class Monitor:
 
         self._last_io = io_seen  # forget processes that have exited
         count_children(procs)
-        count_connections(procs)
+
+        # one system-wide call is far cheaper than asking each process. Without
+        # root, sockets that aren't ours come back with pid None and get skipped.
+        try:
+            for c in psutil.net_connections(kind="inet"):
+                if c.pid in procs:
+                    procs[c.pid].conns += 1
+        except psutil.AccessDenied:
+            pass
         return procs
 
 
 def count_children(procs):
-    """Fill in children and descendants from the ppid links."""
     kids = {}
     for p in procs.values():
         kids.setdefault(p.ppid, []).append(p.pid)
@@ -115,15 +117,3 @@ def count_children(procs):
         mine = kids.get(pid, ())
         p.children = len(mine)
         p.descendants = sum(1 + procs[c].descendants for c in mine)
-
-
-def count_connections(procs):
-    # one system-wide call is far cheaper than asking every process separately.
-    # Without root we only get pids for our own sockets, the rest come back as None.
-    try:
-        conns = psutil.net_connections(kind="inet")
-    except psutil.AccessDenied:
-        return
-    for c in conns:
-        if c.pid in procs:
-            procs[c.pid].conns += 1
