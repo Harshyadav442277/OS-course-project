@@ -1,4 +1,5 @@
 import copy
+import math
 import os
 
 import yaml
@@ -18,26 +19,37 @@ DEFAULTS = {
 
 
 def load(path=None):
-    # no path -> use ./config.yaml if there is one, otherwise just the defaults
     cfg = copy.deepcopy(DEFAULTS)
     if path is None:
         if not os.path.exists("config.yaml"):
             return cfg
         path = "config.yaml"
     with open(path) as f:
-        user = yaml.safe_load(f) or {}
+        user = yaml.safe_load(f)
+    if user is None:
+        user = {}
+    if not isinstance(user, dict):
+        raise ValueError("config should contain YAML sections and values")
     merge(cfg, user)
+    if cfg["interval"] <= 0:
+        raise ValueError("interval must be greater than zero")
+    if cfg["warn_at"] > cfg["contain_at"]:
+        raise ValueError("warn_at must not exceed contain_at")
+    if cfg["rules"]["file_changes"]["window"] <= 0:
+        raise ValueError("rules.file_changes.window must be greater than zero")
     return cfg
 
 
 def merge(base, extra, where=""):
     for key, val in extra.items():
         if key not in base:
-            # a typo like "precent" would otherwise be silently ignored
             raise ValueError(f"unknown config key: {where}{key}")
         if isinstance(base[key], dict):
             if not isinstance(val, dict):
                 raise ValueError(f"{where}{key} should be a section, not a value")
             merge(base[key], val, f"{where}{key}.")
         else:
+            if (isinstance(val, bool) or not isinstance(val, (int, float))
+                    or (isinstance(val, float) and not math.isfinite(val)) or val < 0):
+                raise ValueError(f"{where}{key} must be a finite, nonnegative number")
             base[key] = val

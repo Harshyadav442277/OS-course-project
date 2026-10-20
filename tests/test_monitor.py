@@ -2,12 +2,13 @@ import os
 import subprocess
 import sys
 import time
+from types import SimpleNamespace
 
 import pytest
 
-from sentinel.monitor import Monitor, ProcStats, count_children
+from sentinel.monitor import ATTRS, Monitor, ProcStats, count_children
 
-pytestmark = pytest.mark.skipif(not sys.platform.startswith("linux"), reason="needs /proc")
+needs_linux = pytest.mark.skipif(not sys.platform.startswith("linux"), reason="needs /proc")
 
 
 def fake(pid, ppid):
@@ -26,6 +27,7 @@ def test_tree_counts():
     assert (procs[4].children, procs[4].descendants) == (0, 0)
 
 
+@needs_linux
 def test_sees_own_process():
     me = Monitor().sample()[os.getpid()]
     assert me.ppid == os.getppid()
@@ -33,6 +35,7 @@ def test_sees_own_process():
     assert me.fds is not None  # our own /proc/self/fd is always readable
 
 
+@needs_linux
 def test_counts_real_children():
     # sh with two sleeps in the background: 1 direct child (sh), 3 descendants
     sh = subprocess.Popen(["sh", "-c", "sleep 30 & sleep 30 & wait"])
@@ -47,6 +50,7 @@ def test_counts_real_children():
         sh.wait()
 
 
+@needs_linux
 def test_busy_process_shows_cpu():
     busy = subprocess.Popen([sys.executable, "-c", "while True: pass"])
     try:
@@ -59,8 +63,9 @@ def test_busy_process_shows_cpu():
         busy.wait()
 
 
+@needs_linux
 def test_write_rate(tmp_path):
-    # ~1 MB every 50 ms into tmp_path, which is on tmpfs on newer Ubuntu
+    # This should also detect writes on tmpfs, where disk I/O counters stay at zero.
     code = (
         "import os, sys, time\n"
         "f = open(sys.argv[1], 'wb')\n"
@@ -77,3 +82,26 @@ def test_write_rate(tmp_path):
     finally:
         writer.kill()
         writer.wait()
+
+
+def test_io_rates_reset_on_pid_reuse_and_exit(monkeypatch):
+    info = dict.fromkeys(ATTRS)
+    info.update(pid=100, ppid=1, create_time=10,
+                io_counters=SimpleNamespace(read_chars=100, write_chars=200))
+    processes = [SimpleNamespace(info=info)]
+    monkeypatch.setattr("sentinel.monitor.psutil.process_iter", lambda *a, **kw: processes)
+    monkeypatch.setattr("sentinel.monitor.psutil.net_connections", lambda **kw: [])
+    times = iter([0, 2, 4, 6, 8])
+    monkeypatch.setattr("sentinel.monitor.time.monotonic", lambda: next(times))
+    mon = Monitor()
+    assert mon.sample()[100].write_rate == 0
+    info["io_counters"] = SimpleNamespace(read_chars=120, write_chars=240)
+    sample = mon.sample()[100]
+    assert (sample.read_rate, sample.write_rate) == (10, 20)
+    info["create_time"] = 20
+    sample = mon.sample()[100]
+    assert (sample.read_rate, sample.write_rate) == (0, 0)
+    processes.clear()
+    assert mon.sample() == {}
+    processes.append(SimpleNamespace(info=info))
+    assert mon.sample()[100].write_rate == 0

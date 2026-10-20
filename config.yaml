@@ -2,7 +2,7 @@
 
 interval: 2          # seconds between samples
 
-# total score -> what happens
+# Score labels only; process containment is not implemented yet.
 warn_at: 40
 contain_at: 70
 
@@ -15,6 +15,7 @@ rules:
     count: 50        # whole process subtree, not just direct children
     score: 25
   file_changes:
+    # Scoring is ready, but the CLI has no file watcher feeding this rule yet.
     count: 100
     window: 10       # seconds
     score: 40
@@ -22,5 +23,6 @@ rules:
     count: 100
     score: 20
   open_files:
+    # All file descriptors, including sockets and pipes.
     count: 500
     score: 15

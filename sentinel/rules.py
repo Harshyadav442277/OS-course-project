@@ -1,5 +1,3 @@
-# every rule that fires adds its points (config.yaml), the total picks the level
-
 import time
 from dataclasses import dataclass, field
 
@@ -22,7 +20,7 @@ class RiskEngine:
         self._hot_since = {}
 
     def assess(self, procs, file_changes=None, now=None):
-        # file_changes = {pid: changes in the last window} from the file watcher.
+        # Optional {pid: changes in the configured window}; no live watcher yet.
         # now can be passed in so the tests don't have to sleep 10 s
         now = time.monotonic() if now is None else now
         file_changes = file_changes or {}
@@ -45,7 +43,7 @@ class RiskEngine:
             r = rules["children"]
             if p.descendants > r["count"]:
                 v.score += r["score"]
-                v.reasons.append(f"{p.descendants} child processes")
+                v.reasons.append(f"{p.descendants} descendant processes")
 
             r = rules["file_changes"]
             changes = file_changes.get(pid, 0)
@@ -61,7 +59,7 @@ class RiskEngine:
             r = rules["open_files"]
             if p.fds is not None and p.fds > r["count"]:
                 v.score += r["score"]
-                v.reasons.append(f"{p.fds} open files")
+                v.reasons.append(f"{p.fds} file descriptors")
 
             if v.score >= self.cfg["contain_at"]:
                 v.level = CONTAIN

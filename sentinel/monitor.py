@@ -48,14 +48,13 @@ class Monitor:
         for p in psutil.process_iter(ATTRS, ad_value=None):
             info = p.info
             if info["create_time"] is None:
-                continue  # exited while we were reading it
+                continue  # exited or its start time could not be read
 
             read_rate = write_rate = 0.0
             io = info["io_counters"]
             if io is not None:
-                # rchar/wchar count every read()/write() call. read_bytes/write_bytes
-                # only count what goes to a block device, so anything written to
-                # tmpfs (/tmp on newer Ubuntu) would show up as 0.
+                # rchar/wchar count bytes passed through read/write calls, including
+                # pipes and tmpfs. read_bytes/write_bytes track storage I/O instead.
                 rd, wr = io.read_chars, io.write_chars
                 key = (info["pid"], info["create_time"])
                 prev = self._last_io.get(key)
