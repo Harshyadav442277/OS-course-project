@@ -124,3 +124,29 @@ def test_monitor_once_and_startup_errors(tmp_path):
     )
     assert result.returncode == 1
     assert "sentinel:" in result.stderr and "Traceback" not in result.stderr
+
+
+def test_demo_survives_long_pause_and_children_follow_parent_exit(tmp_path):
+    demo = subprocess.Popen([sys.executable, "-m", "sentinel.demo", "--directory", str(tmp_path),
+                             "--duration", "2"], cwd=ROOT)
+    children = []
+    try:
+        children = wait_for(lambda: (kids if len(kids := psutil.Process(demo.pid).children()) == 4
+                                    else None))
+        demo.send_signal(signal.SIGSTOP)
+        wait_for(lambda: psutil.Process(demo.pid).status() == psutil.STATUS_STOPPED)
+        time.sleep(2.2)  # Longer than the whole configured workload, while stopped.
+        assert all(p.is_running() and p.status() != psutil.STATUS_ZOMBIE for p in children)
+        demo.send_signal(signal.SIGCONT)
+        time.sleep(0.2)
+        assert demo.poll() is None, "resuming must not immediately end the demo"
+        demo.kill()
+        demo.wait(timeout=3)
+        wait_for(lambda: all(not p.is_running() or p.status() == psutil.STATUS_ZOMBIE for p in children))
+    finally:
+        if demo.poll() is None:
+            demo.kill()
+        demo.wait(timeout=3)
+        for child in children:
+            if child.is_running() and child.status() != psutil.STATUS_ZOMBIE:
+                child.kill()

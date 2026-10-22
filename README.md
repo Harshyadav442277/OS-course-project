@@ -9,6 +9,10 @@ manual signal controls, file activity monitoring and a JSON Lines event log.
 Use Linux (or WSL), Python 3.10+, and a normal user account. Signal controls need
 Linux pidfd support, available on kernels 5.3 and later.
 
+On Windows, enter Ubuntu from PowerShell first with `wsl -d Ubuntu`. Plain `wsl`
+may open Docker Desktop if it is your default distribution. Run the commands below
+inside Ubuntu, not PowerShell or Docker's shell.
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -24,7 +28,9 @@ python -m sentinel --demo
 ```
 
 The demo uses lower thresholds from `demo.yaml`, writes eight small files in a
-temporary directory, uses part of one CPU core and starts four sleeping children.
+temporary directory, uses part of one CPU core and starts four children waiting
+on pipes. The workload has about 60 seconds of active work; frozen time does not
+consume it, and the children exit when the parent closes their pipes or exits.
 Only the demo and its descendants are eligible for controls. After a few samples,
 the demo should show `FROZEN`. Quitting cleans up its processes and scratch files.
 

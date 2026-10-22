@@ -1,7 +1,13 @@
 # Hands-on testing
 
-Run this inside WSL Ubuntu, not Windows Python. In this workspace, an environment
-already exists outside OneDrive:
+Start Ubuntu explicitly from PowerShell:
+
+```powershell
+wsl -d Ubuntu
+```
+
+Plain `wsl` may open Docker Desktop. Run the following inside Ubuntu, not Windows
+Python. In this workspace, an environment already exists outside OneDrive:
 
 ```bash
 cd '/mnt/c/Users/hyada/OneDrive/Documents/Study-Related/OS Lab project'
@@ -58,8 +64,10 @@ After `resume`, verify that the process leaves the stopped state and its file
 activity returns. It will not automatically freeze again in that session unless
 you manually freeze it. After `kill`, verify that its PID disappears. After
 `quit`, the temporary directory and remaining demo children should be gone.
-The demo runs for at most 60 seconds of wall time, excluding time needed to exit
-while stopped; start a fresh session if it ends during your checks.
+The demo has about 60 seconds of active work. Frozen time does not consume that
+work, so you can inspect a stopped process before resuming it. The children wait
+on pipes and exit when the parent closes the pipes or ends. If the active work
+finishes, start a fresh demo and use its new PID.
 
 Inspect the action record:
 
